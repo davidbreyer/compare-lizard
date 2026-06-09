@@ -15,6 +15,25 @@ For logo, color, versioning, and publishing details, see [BRAND_AND_DEPLOYMENT.m
 - Copy or save the diff report as JSON.
 - Open local `.json` or `.txt` files into either editor.
 
+## GitHub Pages
+
+The site publishes from the remote `gh-pages` branch:
+
+```text
+https://davidbreyer.github.io/compare-lizard/
+```
+
+Normal deployment flow:
+
+```powershell
+git add -- ...
+git commit -m "Some change"
+git push origin master
+git push origin master:gh-pages
+```
+
+`master` stores the source/history. `gh-pages` is the branch GitHub Pages serves publicly.
+
 ## Release Stamp
 
 The footer displays the current version:

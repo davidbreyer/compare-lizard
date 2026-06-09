@@ -86,6 +86,12 @@ Suggested repository:
 https://github.com/davidbreyer/compare-lizard.git
 ```
 
+The live site is served from `gh-pages`:
+
+```text
+https://davidbreyer.github.io/compare-lizard/
+```
+
 Suggested deployment flow:
 
 ```powershell
