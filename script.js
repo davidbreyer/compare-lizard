@@ -25,7 +25,7 @@ const changedCount = document.querySelector("#changedCount");
 const equalCount = document.querySelector("#equalCount");
 const releaseStamp = document.querySelector("#releaseStamp");
 
-const appRelease = "20260609-2337";
+const appRelease = "20260609-2341";
 
 const sampleLeft = {
   project: "Compare Lizard",
