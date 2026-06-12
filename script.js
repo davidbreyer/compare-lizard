@@ -2,6 +2,7 @@ const leftInput = document.querySelector("#leftInput");
 const rightInput = document.querySelector("#rightInput");
 const formatSelect = document.querySelector("#formatSelect");
 const compareMode = document.querySelector("#compareMode");
+const duplicateModeOption = document.querySelector("#duplicateModeOption");
 const filterSelect = document.querySelector("#filterSelect");
 const strictValues = document.querySelector("#strictValues");
 const ignoreKeyOrder = document.querySelector("#ignoreKeyOrder");
@@ -26,9 +27,10 @@ const addedCount = document.querySelector("#addedCount");
 const removedCount = document.querySelector("#removedCount");
 const changedCount = document.querySelector("#changedCount");
 const equalCount = document.querySelector("#equalCount");
+const duplicateCount = document.querySelector("#duplicateCount");
 const releaseStamp = document.querySelector("#releaseStamp");
 
-const appRelease = "20260611-2123";
+const appRelease = "20260612-0901";
 
 const samples = {
   json: {
@@ -73,6 +75,7 @@ let currentDiffs = [];
 leftInput.value = samples.json.left;
 rightInput.value = samples.json.right;
 renderReleaseStamp();
+updateFormatLabels();
 compareDocuments();
 
 openLeftButton.addEventListener("click", () => leftFileInput.click());
@@ -209,7 +212,9 @@ function compareXml() {
     return;
   }
 
-  currentDiffs = compareXmlElements(left, right, `/${left.nodeName}`);
+  currentDiffs = compareMode.value === "duplicates"
+    ? findXmlDuplicates(left, right)
+    : compareXmlElements(left, right, `/${left.nodeName}`);
 
   if (!includeEqual.checked) {
     currentDiffs = currentDiffs.filter((row) => row.type !== "equal");
@@ -219,7 +224,13 @@ function compareXml() {
   updateCounts();
 
   const summary = getSummary(currentDiffs);
-  const differenceCount = summary.added + summary.removed + summary.changed;
+  const differenceCount = summary.added + summary.removed + summary.changed + summary.duplicate;
+
+  if (compareMode.value === "duplicates") {
+    setStatus(summary.duplicate ? `Found ${summary.duplicate} duplicates` : "No XML duplicates found", "valid");
+    return;
+  }
+
   setStatus(differenceCount ? `Found ${differenceCount} differences` : "Documents match", "valid");
 }
 
@@ -377,6 +388,58 @@ function compareXmlChildren(left, right, path) {
   return rows;
 }
 
+function findXmlDuplicates(leftRoot, rightRoot) {
+  return [
+    ...findXmlDuplicatesInDocument(leftRoot, "Left", `/${leftRoot.nodeName}`),
+    ...findXmlDuplicatesInDocument(rightRoot, "Right", `/${rightRoot.nodeName}`)
+  ];
+}
+
+function findXmlDuplicatesInDocument(root, side, path) {
+  const rows = [];
+  rows.push(...findDuplicateXmlChildren(root, side, path));
+
+  getXmlElementChildren(root).forEach((child, index) => {
+    rows.push(...findXmlDuplicatesInDocument(child, side, `${path}/${child.nodeName}[${index}]`));
+  });
+
+  return rows;
+}
+
+function findDuplicateXmlChildren(parent, side, path) {
+  const groups = new Map();
+
+  getXmlElementChildren(parent).forEach((child, index) => {
+    const key = `${child.nodeName}\u0000${normalizeXmlValue(child.textContent)}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        name: child.nodeName,
+        value: normalizeXmlValue(child.textContent),
+        paths: []
+      });
+    }
+
+    groups.get(key).paths.push(`${path}/${child.nodeName}[${index}]`);
+  });
+
+  return Array.from(groups.values())
+    .filter((group) => group.paths.length > 1)
+    .map((group) => {
+      const detail = `${group.paths.length} matches: ${group.paths.join(", ")}`;
+      return makeDiff(
+        "duplicate",
+        `${path}/${group.name}`,
+        side === "Left" ? detail : undefined,
+        side === "Right" ? detail : undefined
+      );
+    });
+}
+
+function normalizeXmlValue(value) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
 function getXmlAttributes(element) {
   return Array.from(element.attributes).reduce((attrs, attr) => {
     attrs[attr.name] = attr.value;
@@ -459,8 +522,9 @@ function renderDiffs() {
   removedCount.textContent = summary.removed;
   changedCount.textContent = summary.changed;
   equalCount.textContent = summary.equal;
+  duplicateCount.textContent = summary.duplicate;
   resultCount.textContent = `${rows.length} ${rows.length === 1 ? "row" : "rows"}`;
-  stats.textContent = `${summary.added} added · ${summary.removed} removed · ${summary.changed} changed`;
+  stats.textContent = `${summary.added} added · ${summary.removed} removed · ${summary.changed} changed · ${summary.duplicate} duplicate`;
 }
 
 function makeCell(value, label) {
@@ -487,7 +551,7 @@ function getSummary(rows) {
       summary[row.type] += 1;
       return summary;
     },
-    { added: 0, removed: 0, changed: 0, equal: 0 }
+    { added: 0, removed: 0, changed: 0, equal: 0, duplicate: 0 }
   );
 }
 
@@ -619,9 +683,15 @@ function applyDetectedFormat(fileName, content) {
 function updateFormatLabels() {
   const name = formatSelect.value.toUpperCase();
   const sample = samples[formatSelect.value];
+  const isXml = formatSelect.value === "xml";
 
   leftInputLabel.textContent = `Left ${name}`;
   rightInputLabel.textContent = `Right ${name}`;
+  duplicateModeOption.disabled = !isXml;
+
+  if (!isXml && compareMode.value === "duplicates") {
+    compareMode.value = "structural";
+  }
 
   if (sample) {
     leftInput.placeholder = sample.left;
