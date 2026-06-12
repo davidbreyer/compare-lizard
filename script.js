@@ -28,7 +28,7 @@ const changedCount = document.querySelector("#changedCount");
 const equalCount = document.querySelector("#equalCount");
 const releaseStamp = document.querySelector("#releaseStamp");
 
-const appRelease = "20260612-0929";
+const appRelease = "20260612-1444";
 
 const samples = {
   json: {
@@ -69,6 +69,10 @@ const samples = {
 };
 
 let currentDiffs = [];
+const openedFileNames = {
+  left: "",
+  right: ""
+};
 
 leftInput.value = samples.json.left;
 rightInput.value = samples.json.right;
@@ -115,6 +119,7 @@ async function openSelectedFile(input, target, side) {
 
   try {
     target.value = await file.text();
+    openedFileNames[side] = file.name;
     applyDetectedFormat(file.name, target.value);
     updateCounts();
     compareDocuments();
@@ -129,10 +134,12 @@ function handleFormatChange() {
 
   if (sample && shouldReplaceWithSample(leftInput.value, "left")) {
     leftInput.value = sample.left;
+    openedFileNames.left = "";
   }
 
   if (sample && shouldReplaceWithSample(rightInput.value, "right")) {
     rightInput.value = sample.right;
+    openedFileNames.right = "";
   }
 
   updateFormatLabels();
@@ -588,9 +595,12 @@ function buildReport() {
 function clearAll() {
   leftInput.value = "";
   rightInput.value = "";
+  openedFileNames.left = "";
+  openedFileNames.right = "";
   currentDiffs = [];
   renderDiffs();
   updateCounts();
+  updateFormatLabels();
   setStatus("Ready", "idle");
 }
 
@@ -621,8 +631,10 @@ function updateFormatLabels() {
   const name = formatSelect.value.toUpperCase();
   const sample = samples[formatSelect.value];
 
-  leftInputLabel.textContent = `Left ${name}`;
-  rightInputLabel.textContent = `Right ${name}`;
+  leftInputLabel.textContent = openedFileNames.left || `Left ${name}`;
+  rightInputLabel.textContent = openedFileNames.right || `Right ${name}`;
+  leftInputLabel.title = openedFileNames.left || "";
+  rightInputLabel.title = openedFileNames.right || "";
 
   if (sample) {
     leftInput.placeholder = sample.left;
