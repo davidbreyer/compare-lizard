@@ -4,17 +4,17 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Compare Lizard</title>
-    <link rel="icon" type="image/png" href="assets/apple-icon.png?v=20260610-2311">
-    <link rel="apple-touch-icon" href="assets/apple-icon.png?v=20260610-2311">
-    <link rel="stylesheet" href="styles.css?v=20260610-2311">
+    <link rel="icon" type="image/png" href="assets/apple-icon.png?v=20260611-2123">
+    <link rel="apple-touch-icon" href="assets/apple-icon.png?v=20260611-2123">
+    <link rel="stylesheet" href="styles.css?v=20260611-2123">
   </head>
   <body>
     <main class="app-shell">
       <header class="top-bar">
         <div class="brand-lockup">
-          <img src="assets/yelling-lizard-logo.png?v=20260610-2311" alt="" class="brand-logo" width="72" height="72">
+          <img src="assets/yelling-lizard-logo.png?v=20260611-2123" alt="" class="brand-logo" width="72" height="72">
           <div>
-            <p class="eyebrow">JSON diff checker</p>
+            <p class="eyebrow">JSON + XML diff checker</p>
             <h1>Compare Lizard</h1>
           </div>
         </div>
@@ -33,8 +33,8 @@
           <button id="copyButton" type="button">Copy</button>
           <button id="saveButton" type="button">Save</button>
           <button id="clearButton" type="button" class="ghost-button">Clear</button>
-          <input id="leftFileInput" class="file-input" type="file" accept=".json,.txt,application/json,text/plain">
-          <input id="rightFileInput" class="file-input" type="file" accept=".json,.txt,application/json,text/plain">
+          <input id="leftFileInput" class="file-input" type="file" accept=".json,.xml,.txt,application/json,application/xml,text/xml,text/plain">
+          <input id="rightFileInput" class="file-input" type="file" accept=".json,.xml,.txt,application/json,application/xml,text/xml,text/plain">
         </div>
       </header>
 
@@ -42,6 +42,12 @@
         <div class="control-group">
           <span class="control-group-title">Compare</span>
           <div class="control-row">
+            <label class="field-label" for="formatSelect">Format</label>
+            <select id="formatSelect">
+              <option value="json">JSON</option>
+              <option value="xml">XML</option>
+            </select>
+
             <label class="field-label" for="compareMode">Mode</label>
             <select id="compareMode">
               <option value="structural">Structural paths</option>
@@ -68,7 +74,7 @@
             </label>
             <label class="checkbox-control" for="ignoreKeyOrder">
               <input id="ignoreKeyOrder" type="checkbox" checked>
-              <span>Ignore object key order</span>
+              <span>Ignore key/attribute order</span>
             </label>
             <label class="checkbox-control" for="includeEqual">
               <input id="includeEqual" type="checkbox">
@@ -102,21 +108,21 @@
         </button>
       </section>
 
-      <section class="editor-grid" aria-label="JSON editors">
+      <section class="editor-grid" aria-label="Comparison editors">
         <div class="editor-pane">
           <div class="pane-header">
-            <label for="leftInput">Left JSON</label>
+            <label id="leftInputLabel" for="leftInput">Left JSON</label>
             <span id="leftCount">0 chars</span>
           </div>
-          <textarea id="leftInput" spellcheck="false" aria-label="Left JSON input"></textarea>
+          <textarea id="leftInput" spellcheck="false" aria-label="Left comparison input"></textarea>
         </div>
 
         <div class="editor-pane">
           <div class="pane-header">
-            <label for="rightInput">Right JSON</label>
+            <label id="rightInputLabel" for="rightInput">Right JSON</label>
             <span id="rightCount">0 chars</span>
           </div>
-          <textarea id="rightInput" spellcheck="false" aria-label="Right JSON input"></textarea>
+          <textarea id="rightInput" spellcheck="false" aria-label="Right comparison input"></textarea>
         </div>
       </section>
 
@@ -140,11 +146,11 @@
         <span>Ready to spot the sneaky bits.</span>
         <span>
           <a href="https://github.com/davidbreyer/compare-lizard" target="_blank" rel="noreferrer">GitHub</a>
-          <span id="releaseStamp" data-version>Version: 20260610-2311</span>
+          <span id="releaseStamp" data-version>Version: 20260611-2123</span>
         </span>
       </footer>
     </main>
 
-    <script src="script.js?v=20260610-2311"></script>
+    <script src="script.js?v=20260611-2123"></script>
   </body>
 </html>

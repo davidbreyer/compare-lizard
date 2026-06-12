@@ -1,5 +1,6 @@
 const leftInput = document.querySelector("#leftInput");
 const rightInput = document.querySelector("#rightInput");
+const formatSelect = document.querySelector("#formatSelect");
 const compareMode = document.querySelector("#compareMode");
 const filterSelect = document.querySelector("#filterSelect");
 const strictValues = document.querySelector("#strictValues");
@@ -15,6 +16,8 @@ const saveButton = document.querySelector("#saveButton");
 const clearButton = document.querySelector("#clearButton");
 const status = document.querySelector("#status");
 const stats = document.querySelector("#stats");
+const leftInputLabel = document.querySelector("#leftInputLabel");
+const rightInputLabel = document.querySelector("#rightInputLabel");
 const leftCount = document.querySelector("#leftCount");
 const rightCount = document.querySelector("#rightCount");
 const resultCount = document.querySelector("#resultCount");
@@ -25,60 +28,68 @@ const changedCount = document.querySelector("#changedCount");
 const equalCount = document.querySelector("#equalCount");
 const releaseStamp = document.querySelector("#releaseStamp");
 
-const appRelease = "20260610-2311";
+const appRelease = "20260611-2123";
 
-const sampleLeft = {
-  project: "Compare Lizard",
-  release: 1,
-  active: true,
-  tags: ["json", "diff", "lizard"],
-  owner: {
-    name: "Ada",
-    role: "formatter"
+const samples = {
+  json: {
+    left: JSON.stringify({
+      project: "Compare Lizard",
+      release: 1,
+      active: true,
+      tags: ["json", "diff", "lizard"],
+      owner: {
+        name: "Ada",
+        role: "formatter"
+      },
+      limits: {
+        maxDepth: 8,
+        strict: true
+      }
+    }, null, 2),
+    right: JSON.stringify({
+      project: "Compare Lizard",
+      release: 2,
+      active: true,
+      tags: ["json", "compare", "lizard"],
+      owner: {
+        name: "Ada",
+        role: "reviewer"
+      },
+      limits: {
+        maxDepth: 8,
+        strict: false
+      },
+      output: "report"
+    }, null, 2)
   },
-  limits: {
-    maxDepth: 8,
-    strict: true
+  xml: {
+    left: '<project name="Compare Lizard">\n  <release>1</release>\n  <active>true</active>\n  <owner role="formatter">Ada</owner>\n  <limits maxDepth="8" strict="true" />\n</project>',
+    right: '<project name="Compare Lizard">\n  <release>2</release>\n  <active>true</active>\n  <owner role="reviewer">Ada</owner>\n  <limits maxDepth="8" strict="false" />\n  <output>report</output>\n</project>'
   }
-};
-
-const sampleRight = {
-  project: "Compare Lizard",
-  release: 2,
-  active: true,
-  tags: ["json", "compare", "lizard"],
-  owner: {
-    name: "Ada",
-    role: "reviewer"
-  },
-  limits: {
-    maxDepth: 8,
-    strict: false
-  },
-  output: "report"
 };
 
 let currentDiffs = [];
 
-leftInput.value = JSON.stringify(sampleLeft, null, 2);
-rightInput.value = JSON.stringify(sampleRight, null, 2);
+leftInput.value = samples.json.left;
+rightInput.value = samples.json.right;
 renderReleaseStamp();
-compareJson();
+compareDocuments();
 
 openLeftButton.addEventListener("click", () => leftFileInput.click());
 openRightButton.addEventListener("click", () => rightFileInput.click());
 leftFileInput.addEventListener("change", () => openSelectedFile(leftFileInput, leftInput, "left"));
 rightFileInput.addEventListener("change", () => openSelectedFile(rightFileInput, rightInput, "right"));
-compareButton.addEventListener("click", compareJson);
+compareButton.addEventListener("click", compareDocuments);
 copyButton.addEventListener("click", copyDiffReport);
 saveButton.addEventListener("click", saveDiffReport);
 clearButton.addEventListener("click", clearAll);
 leftInput.addEventListener("input", handleEditorInput);
 rightInput.addEventListener("input", handleEditorInput);
-compareMode.addEventListener("change", compareJson);
-strictValues.addEventListener("change", compareJson);
-ignoreKeyOrder.addEventListener("change", compareJson);
-includeEqual.addEventListener("change", compareJson);
+formatSelect.addEventListener("change", handleFormatChange);
+compareMode.addEventListener("change", compareDocuments);
+strictValues.addEventListener("change", compareDocuments);
+ignoreKeyOrder.addEventListener("change", compareDocuments);
+includeEqual.addEventListener("change", compareDocuments);
 filterSelect.addEventListener("change", renderDiffs);
 
 document.querySelectorAll("[data-filter]").forEach((button) => {
@@ -103,12 +114,37 @@ async function openSelectedFile(input, target, side) {
 
   try {
     target.value = await file.text();
+    applyDetectedFormat(file.name, target.value);
     updateCounts();
-    compareJson();
+    compareDocuments();
     setStatus(`Opened ${file.name} on ${side}`, "valid");
   } catch {
     setStatus("Could not open file", "error");
   }
+}
+
+function handleFormatChange() {
+  const sample = samples[formatSelect.value];
+
+  if (sample && shouldReplaceWithSample(leftInput.value, "left")) {
+    leftInput.value = sample.left;
+  }
+
+  if (sample && shouldReplaceWithSample(rightInput.value, "right")) {
+    rightInput.value = sample.right;
+  }
+
+  updateFormatLabels();
+  compareDocuments();
+}
+
+function compareDocuments() {
+  if (formatSelect.value === "xml") {
+    compareXml();
+    return;
+  }
+
+  compareJson();
 }
 
 function compareJson() {
@@ -147,6 +183,61 @@ function compareJson() {
   const summary = getSummary(currentDiffs);
   const differenceCount = summary.added + summary.removed + summary.changed;
   setStatus(differenceCount ? `Found ${differenceCount} differences` : "Documents match", "valid");
+}
+
+function compareXml() {
+  let left;
+  let right;
+
+  try {
+    left = parseXml(leftInput.value, "Left XML");
+  } catch (error) {
+    setStatus(error.message, "error");
+    currentDiffs = [];
+    renderDiffs();
+    updateCounts();
+    return;
+  }
+
+  try {
+    right = parseXml(rightInput.value, "Right XML");
+  } catch (error) {
+    setStatus(error.message, "error");
+    currentDiffs = [];
+    renderDiffs();
+    updateCounts();
+    return;
+  }
+
+  currentDiffs = compareXmlElements(left, right, `/${left.nodeName}`);
+
+  if (!includeEqual.checked) {
+    currentDiffs = currentDiffs.filter((row) => row.type !== "equal");
+  }
+
+  renderDiffs();
+  updateCounts();
+
+  const summary = getSummary(currentDiffs);
+  const differenceCount = summary.added + summary.removed + summary.changed;
+  setStatus(differenceCount ? `Found ${differenceCount} differences` : "Documents match", "valid");
+}
+
+function parseXml(input, label) {
+  const source = input.trim();
+
+  if (!source) {
+    throw new Error(`${label}: enter XML to compare`);
+  }
+
+  const document = new DOMParser().parseFromString(source, "application/xml");
+  const parserError = document.querySelector("parsererror");
+
+  if (parserError) {
+    throw new Error(`${label}: ${parserError.textContent.trim().replace(/\s+/g, " ")}`);
+  }
+
+  return document.documentElement;
 }
 
 function compareValues(left, right, path) {
@@ -213,6 +304,100 @@ function compareArrays(left, right, path) {
   }
 
   return rows;
+}
+
+function compareXmlElements(left, right, path) {
+  if (left.nodeName !== right.nodeName) {
+    return [makeDiff("changed", path, serializeXml(left), serializeXml(right))];
+  }
+
+  const rows = [];
+  rows.push(...compareXmlAttributes(left, right, path));
+  rows.push(...compareXmlText(left, right, path));
+  rows.push(...compareXmlChildren(left, right, path));
+  return rows;
+}
+
+function compareXmlAttributes(left, right, path) {
+  const leftAttrs = getXmlAttributes(left);
+  const rightAttrs = getXmlAttributes(right);
+  const keys = Array.from(new Set([...Object.keys(leftAttrs), ...Object.keys(rightAttrs)]));
+
+  if (ignoreKeyOrder.checked) {
+    keys.sort((a, b) => a.localeCompare(b));
+  }
+
+  return keys.flatMap((key) => {
+    const attrPath = `${path}/@${key}`;
+
+    if (!Object.hasOwn(leftAttrs, key)) {
+      return [makeDiff("added", attrPath, undefined, rightAttrs[key])];
+    }
+
+    if (!Object.hasOwn(rightAttrs, key)) {
+      return [makeDiff("removed", attrPath, leftAttrs[key], undefined)];
+    }
+
+    return makeLeafDiff(leftAttrs[key], rightAttrs[key], attrPath);
+  });
+}
+
+function compareXmlText(left, right, path) {
+  const leftText = getDirectXmlText(left);
+  const rightText = getDirectXmlText(right);
+
+  if (!leftText && !rightText) {
+    return [];
+  }
+
+  return makeLeafDiff(leftText, rightText, `${path}/text()`);
+}
+
+function compareXmlChildren(left, right, path) {
+  const leftChildren = getXmlElementChildren(left);
+  const rightChildren = getXmlElementChildren(right);
+  const length = Math.max(leftChildren.length, rightChildren.length);
+  const rows = [];
+
+  for (let index = 0; index < length; index += 1) {
+    const leftChild = leftChildren[index];
+    const rightChild = rightChildren[index];
+
+    if (!leftChild && rightChild) {
+      rows.push(makeDiff("added", `${path}/${rightChild.nodeName}[${index}]`, undefined, serializeXml(rightChild)));
+    } else if (leftChild && !rightChild) {
+      rows.push(makeDiff("removed", `${path}/${leftChild.nodeName}[${index}]`, serializeXml(leftChild), undefined));
+    } else if (leftChild.nodeName !== rightChild.nodeName) {
+      rows.push(makeDiff("changed", `${path}/*[${index}]`, serializeXml(leftChild), serializeXml(rightChild)));
+    } else {
+      rows.push(...compareXmlElements(leftChild, rightChild, `${path}/${leftChild.nodeName}[${index}]`));
+    }
+  }
+
+  return rows;
+}
+
+function getXmlAttributes(element) {
+  return Array.from(element.attributes).reduce((attrs, attr) => {
+    attrs[attr.name] = attr.value;
+    return attrs;
+  }, {});
+}
+
+function getDirectXmlText(element) {
+  return Array.from(element.childNodes)
+    .filter((node) => node.nodeType === Node.TEXT_NODE || node.nodeType === Node.CDATA_SECTION_NODE)
+    .map((node) => node.nodeValue)
+    .join("")
+    .trim();
+}
+
+function getXmlElementChildren(element) {
+  return Array.from(element.children);
+}
+
+function serializeXml(node) {
+  return new XMLSerializer().serializeToString(node);
 }
 
 function makeLeafDiff(left, right, path) {
@@ -388,6 +573,7 @@ function buildReport() {
     app: "Compare Lizard",
     release: appRelease,
     options: {
+      format: formatSelect.value,
       mode: compareMode.value,
       strictValues: strictValues.checked,
       ignoreObjectKeyOrder: ignoreKeyOrder.checked,
@@ -415,6 +601,36 @@ function setStatus(message, type) {
 function updateCounts() {
   leftCount.textContent = `${leftInput.value.length} chars`;
   rightCount.textContent = `${rightInput.value.length} chars`;
+}
+
+function applyDetectedFormat(fileName, content) {
+  const trimmed = content.trim();
+  const extension = fileName.toLowerCase().split(".").pop();
+
+  if (extension === "xml" || trimmed.startsWith("<")) {
+    formatSelect.value = "xml";
+  } else if (extension === "json" || trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    formatSelect.value = "json";
+  }
+
+  updateFormatLabels();
+}
+
+function updateFormatLabels() {
+  const name = formatSelect.value.toUpperCase();
+  const sample = samples[formatSelect.value];
+
+  leftInputLabel.textContent = `Left ${name}`;
+  rightInputLabel.textContent = `Right ${name}`;
+
+  if (sample) {
+    leftInput.placeholder = sample.left;
+    rightInput.placeholder = sample.right;
+  }
+}
+
+function shouldReplaceWithSample(value, side) {
+  return !value.trim() || Object.values(samples).some((sample) => sample[side] === value);
 }
 
 function renderReleaseStamp() {
