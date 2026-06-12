@@ -11,9 +11,8 @@ For logo, color, versioning, and publishing details, see [BRAND_AND_DEPLOYMENT.m
 - Parse and validate two JSON or XML documents.
 - Compare JSON object keys, array items, primitives, and nested values.
 - Compare XML elements, attributes, direct text, and child elements.
-- Find XML duplicates under the same parent by element name and normalized text value.
 - Toggle strict values, key or attribute order handling, and equal-path visibility.
-- Filter results by added, removed, changed, equal, and duplicate paths.
+- Filter results by added, removed, changed, and equal paths.
 - Copy or save the diff report as JSON.
 - Open local `.json`, `.xml`, or `.txt` files into either editor.
 
