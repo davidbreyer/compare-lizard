@@ -28,7 +28,7 @@ const changedCount = document.querySelector("#changedCount");
 const equalCount = document.querySelector("#equalCount");
 const releaseStamp = document.querySelector("#releaseStamp");
 
-const appRelease = "20260614-1011";
+const appRelease = "20260615-1232";
 
 const samples = {
   json: {
@@ -580,6 +580,18 @@ function buildReport() {
   return {
     app: "Compare Lizard",
     release: appRelease,
+    inputs: {
+      left: {
+        label: getInputLabel("left"),
+        fileName: openedFileNames.left || null,
+        characters: leftInput.value.length
+      },
+      right: {
+        label: getInputLabel("right"),
+        fileName: openedFileNames.right || null,
+        characters: rightInput.value.length
+      }
+    },
     options: {
       format: formatSelect.value,
       mode: compareMode.value,
@@ -628,11 +640,10 @@ function applyDetectedFormat(fileName, content) {
 }
 
 function updateFormatLabels() {
-  const name = formatSelect.value.toUpperCase();
   const sample = samples[formatSelect.value];
 
-  leftInputLabel.textContent = openedFileNames.left || `Left ${name}`;
-  rightInputLabel.textContent = openedFileNames.right || `Right ${name}`;
+  leftInputLabel.textContent = getInputLabel("left");
+  rightInputLabel.textContent = getInputLabel("right");
   leftInputLabel.title = openedFileNames.left || "";
   rightInputLabel.title = openedFileNames.right || "";
 
@@ -640,6 +651,11 @@ function updateFormatLabels() {
     leftInput.placeholder = sample.left;
     rightInput.placeholder = sample.right;
   }
+}
+
+function getInputLabel(side) {
+  const prefix = side === "left" ? "Left" : "Right";
+  return openedFileNames[side] || `${prefix} ${formatSelect.value.toUpperCase()}`;
 }
 
 function shouldReplaceWithSample(value, side) {
