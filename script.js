@@ -28,7 +28,7 @@ const changedCount = document.querySelector("#changedCount");
 const equalCount = document.querySelector("#equalCount");
 const releaseStamp = document.querySelector("#releaseStamp");
 
-const appRelease = "20260617-2109";
+const appRelease = "20260618-2124";
 
 const samples = {
   json: {
@@ -73,6 +73,11 @@ const openedFileNames = {
   left: "",
   right: ""
 };
+const SOFT_INPUT_LIMIT_BYTES = 1_000_000;
+const HARD_INPUT_LIMIT_BYTES = 10_000_000;
+const MAX_JSON_DEPTH = 80;
+const MAX_XML_DEPTH = 80;
+const MAX_XML_ELEMENTS = 50_000;
 
 leftInput.value = samples.json.left;
 rightInput.value = samples.json.right;
@@ -90,6 +95,8 @@ saveButton.addEventListener("click", saveDiffReport);
 clearButton.addEventListener("click", clearAll);
 leftInput.addEventListener("input", handleEditorInput);
 rightInput.addEventListener("input", handleEditorInput);
+leftInput.addEventListener("paste", (event) => handleEditorPaste(event, leftInput, "Left"));
+rightInput.addEventListener("paste", (event) => handleEditorPaste(event, rightInput, "Right"));
 formatSelect.addEventListener("change", handleFormatChange);
 compareMode.addEventListener("change", compareDocuments);
 strictValues.addEventListener("change", compareDocuments);
@@ -106,7 +113,22 @@ document.querySelectorAll("[data-filter]").forEach((button) => {
 
 function handleEditorInput() {
   updateCounts();
-  setStatus("Ready", "idle");
+  showInputSizeStatus();
+}
+
+function handleEditorPaste(event, target, label) {
+  const text = event.clipboardData?.getData("text") || "";
+  const projectedSize = getProjectedTextSize(target, text);
+
+  if (projectedSize > HARD_INPUT_LIMIT_BYTES) {
+    event.preventDefault();
+    setStatus(`${label} input would exceed ${formatBytes(HARD_INPUT_LIMIT_BYTES)}. Paste blocked.`, "error");
+    return;
+  }
+
+  if (projectedSize > SOFT_INPUT_LIMIT_BYTES) {
+    setStatus(`${label} input is large (${formatBytes(projectedSize)}). Compare may take a moment.`, "idle");
+  }
 }
 
 async function openSelectedFile(input, target, side) {
@@ -114,6 +136,11 @@ async function openSelectedFile(input, target, side) {
   input.value = "";
 
   if (!file) {
+    return;
+  }
+
+  if (file.size > HARD_INPUT_LIMIT_BYTES) {
+    setStatus(`${file.name} is ${formatBytes(file.size)}. Files over ${formatBytes(HARD_INPUT_LIMIT_BYTES)} are blocked.`, "error");
     return;
   }
 
@@ -147,6 +174,16 @@ function handleFormatChange() {
 }
 
 function compareDocuments() {
+  const sizeProblem = getHardInputSizeProblem();
+
+  if (sizeProblem) {
+    currentDiffs = [];
+    renderDiffs();
+    updateCounts();
+    setStatus(sizeProblem, "error");
+    return;
+  }
+
   if (formatSelect.value === "xml") {
     compareXml();
     return;
@@ -161,6 +198,7 @@ function compareJson() {
 
   try {
     left = JSON.parse(leftInput.value);
+    validateJsonDepth(left);
   } catch (error) {
     setStatus(`Left JSON: ${error.message}`, "error");
     currentDiffs = [];
@@ -171,6 +209,7 @@ function compareJson() {
 
   try {
     right = JSON.parse(rightInput.value);
+    validateJsonDepth(right);
   } catch (error) {
     setStatus(`Right JSON: ${error.message}`, "error");
     currentDiffs = [];
@@ -190,7 +229,7 @@ function compareJson() {
 
   const summary = getSummary(currentDiffs);
   const differenceCount = summary.added + summary.removed + summary.changed;
-  setStatus(differenceCount ? `Found ${differenceCount} differences` : "Documents match", "valid");
+  setStatus(getResultStatus(differenceCount), "valid");
 }
 
 function compareXml() {
@@ -228,7 +267,7 @@ function compareXml() {
 
   const summary = getSummary(currentDiffs);
   const differenceCount = summary.added + summary.removed + summary.changed;
-  setStatus(differenceCount ? `Found ${differenceCount} differences` : "Documents match", "valid");
+  setStatus(getResultStatus(differenceCount), "valid");
 }
 
 function parseXml(input, label) {
@@ -238,12 +277,18 @@ function parseXml(input, label) {
     throw new Error(`${label}: enter XML to compare`);
   }
 
+  if (/<!DOCTYPE/i.test(source)) {
+    throw new Error(`${label}: DOCTYPE is not supported`);
+  }
+
   const document = new DOMParser().parseFromString(source, "application/xml");
   const parserError = document.querySelector("parsererror");
 
   if (parserError) {
     throw new Error(`${label}: ${parserError.textContent.trim().replace(/\s+/g, " ")}`);
   }
+
+  validateXmlShape(document.documentElement, label);
 
   return document.documentElement;
 }
@@ -619,6 +664,115 @@ function clearAll() {
 function setStatus(message, type) {
   status.textContent = message;
   status.className = `status-pill status-${type}`;
+}
+
+function showInputSizeStatus() {
+  const largest = getLargestInputSize();
+
+  if (largest > SOFT_INPUT_LIMIT_BYTES) {
+    setStatus(`Large input detected (${formatBytes(largest)}). Compare may take a moment.`, "idle");
+    return;
+  }
+
+  setStatus("Ready", "idle");
+}
+
+function getHardInputSizeProblem() {
+  const leftSize = getTextSize(leftInput.value);
+  const rightSize = getTextSize(rightInput.value);
+
+  if (leftSize > HARD_INPUT_LIMIT_BYTES) {
+    return `Left input is ${formatBytes(leftSize)}. Inputs over ${formatBytes(HARD_INPUT_LIMIT_BYTES)} are blocked.`;
+  }
+
+  if (rightSize > HARD_INPUT_LIMIT_BYTES) {
+    return `Right input is ${formatBytes(rightSize)}. Inputs over ${formatBytes(HARD_INPUT_LIMIT_BYTES)} are blocked.`;
+  }
+
+  return "";
+}
+
+function getLargestInputSize() {
+  return Math.max(getTextSize(leftInput.value), getTextSize(rightInput.value));
+}
+
+function getTextSize(value) {
+  return new Blob([value]).size;
+}
+
+function getProjectedTextSize(target, insertedText) {
+  const start = target.selectionStart ?? target.value.length;
+  const end = target.selectionEnd ?? target.value.length;
+  const nextValue = `${target.value.slice(0, start)}${insertedText}${target.value.slice(end)}`;
+  return getTextSize(nextValue);
+}
+
+function formatBytes(bytes) {
+  if (bytes >= 1_000_000) {
+    return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  }
+
+  if (bytes >= 1_000) {
+    return `${Math.round(bytes / 1_000)} KB`;
+  }
+
+  return `${bytes} bytes`;
+}
+
+function validateJsonDepth(value) {
+  const stack = [{ value, depth: 1 }];
+
+  while (stack.length) {
+    const item = stack.pop();
+
+    if (!item || item.value === null || typeof item.value !== "object") {
+      continue;
+    }
+
+    if (item.depth > MAX_JSON_DEPTH) {
+      throw new Error(`nesting is deeper than ${MAX_JSON_DEPTH} levels`);
+    }
+
+    Object.values(item.value).forEach((child) => {
+      if (child && typeof child === "object") {
+        stack.push({ value: child, depth: item.depth + 1 });
+      }
+    });
+  }
+
+}
+
+function validateXmlShape(root, label) {
+  const stack = [{ element: root, depth: 1 }];
+  let count = 0;
+
+  while (stack.length) {
+    const item = stack.pop();
+    count += 1;
+
+    if (count > MAX_XML_ELEMENTS) {
+      throw new Error(`${label}: XML has more than ${MAX_XML_ELEMENTS.toLocaleString()} elements`);
+    }
+
+    if (item.depth > MAX_XML_DEPTH) {
+      throw new Error(`${label}: XML nesting is deeper than ${MAX_XML_DEPTH} levels`);
+    }
+
+    getXmlElementChildren(item.element).forEach((child) => {
+      stack.push({ element: child, depth: item.depth + 1 });
+    });
+  }
+}
+
+function getResultStatus(differenceCount) {
+  const base = differenceCount ? `Found ${differenceCount} differences` : "Documents match";
+  const largest = getLargestInputSize();
+
+  if (largest > SOFT_INPUT_LIMIT_BYTES) {
+    return `${base}. Large input compared (${formatBytes(largest)}).`;
+  }
+
+  return base;
 }
 
 function updateCounts() {
