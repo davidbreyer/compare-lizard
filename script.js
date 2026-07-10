@@ -28,7 +28,7 @@ const changedCount = document.querySelector("#changedCount");
 const equalCount = document.querySelector("#equalCount");
 const releaseStamp = document.querySelector("#releaseStamp");
 
-const appRelease = "20260618-2124";
+const appRelease = "20260709-2041";
 
 const samples = {
   json: {
