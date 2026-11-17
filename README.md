@@ -15,6 +15,7 @@ For logo, color, versioning, and publishing details, see [BRAND_AND_DEPLOYMENT.m
 - Filter results by added, removed, changed, and equal paths.
 - Copy or save the diff report as JSON.
 - Open local `.json`, `.xml`, or `.txt` files into either editor.
+- Restore both inputs, comparison settings, and the last diff from browser storage. **Clear** empties the saved inputs and results.
 
 ## GitHub Pages
 

@@ -27,8 +27,12 @@ const removedCount = document.querySelector("#removedCount");
 const changedCount = document.querySelector("#changedCount");
 const equalCount = document.querySelector("#equalCount");
 const releaseStamp = document.querySelector("#releaseStamp");
+const workspaceStatus = document.querySelector("#workspaceStatus");
 
-const appRelease = "20260709-2041";
+const appRelease = "20261117-0351";
+
+const workspaceStorageKey = "compare-lizard.workspace.v1";
+let workspaceSaveTimer = null;
 
 const samples = {
   json: {
@@ -79,41 +83,128 @@ const MAX_JSON_DEPTH = 80;
 const MAX_XML_DEPTH = 80;
 const MAX_XML_ELEMENTS = 50_000;
 
-leftInput.value = samples.json.left;
-rightInput.value = samples.json.right;
 renderReleaseStamp();
-updateFormatLabels();
-compareDocuments();
+if (!restoreWorkspace()) {
+  leftInput.value = samples.json.left;
+  rightInput.value = samples.json.right;
+  updateFormatLabels();
+  compareDocuments();
+}
 
 openLeftButton.addEventListener("click", () => leftFileInput.click());
 openRightButton.addEventListener("click", () => rightFileInput.click());
 leftFileInput.addEventListener("change", () => openSelectedFile(leftFileInput, leftInput, "left"));
 rightFileInput.addEventListener("change", () => openSelectedFile(rightFileInput, rightInput, "right"));
-compareButton.addEventListener("click", compareDocuments);
+onWorkspaceAction(compareButton, "click", compareDocuments);
 copyButton.addEventListener("click", copyDiffReport);
 saveButton.addEventListener("click", saveDiffReport);
-clearButton.addEventListener("click", clearAll);
+onWorkspaceAction(clearButton, "click", clearAll);
 leftInput.addEventListener("input", handleEditorInput);
 rightInput.addEventListener("input", handleEditorInput);
 leftInput.addEventListener("paste", (event) => handleEditorPaste(event, leftInput, "Left"));
 rightInput.addEventListener("paste", (event) => handleEditorPaste(event, rightInput, "Right"));
-formatSelect.addEventListener("change", handleFormatChange);
-compareMode.addEventListener("change", compareDocuments);
-strictValues.addEventListener("change", compareDocuments);
-ignoreKeyOrder.addEventListener("change", compareDocuments);
-includeEqual.addEventListener("change", compareDocuments);
-filterSelect.addEventListener("change", renderDiffs);
+onWorkspaceAction(formatSelect, "change", handleFormatChange);
+onWorkspaceAction(compareMode, "change", compareDocuments);
+onWorkspaceAction(strictValues, "change", compareDocuments);
+onWorkspaceAction(ignoreKeyOrder, "change", compareDocuments);
+onWorkspaceAction(includeEqual, "change", compareDocuments);
+onWorkspaceAction(filterSelect, "change", renderDiffs);
+window.addEventListener("pagehide", flushWorkspaceSave);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) flushWorkspaceSave();
+});
 
 document.querySelectorAll("[data-filter]").forEach((button) => {
-  button.addEventListener("click", () => {
+  onWorkspaceAction(button, "click", () => {
     filterSelect.value = button.dataset.filter;
     renderDiffs();
   });
 });
 
+function onWorkspaceAction(control, event, action) {
+  control.addEventListener(event, () => {
+    action();
+    saveWorkspace();
+  });
+}
+
+function restoreWorkspace() {
+  let workspace;
+  try {
+    const raw = localStorage.getItem(workspaceStorageKey);
+    if (raw === null) return false;
+    workspace = JSON.parse(raw);
+    if (typeof workspace?.left !== "string" || typeof workspace.right !== "string" ||
+        !Array.isArray(workspace.rows) || !workspace.rows.every((row) =>
+          typeof row?.path === "string" && ["added", "removed", "changed", "equal"].includes(row.type))) {
+      throw new Error("Invalid workspace");
+    }
+  } catch {
+    setWorkspaceStatus("Could not restore the saved workspace.");
+    return false;
+  }
+
+  for (const [select, value] of [[formatSelect, workspace.format], [compareMode, workspace.mode], [filterSelect, workspace.filter]]) {
+    if (Array.from(select.options).some((option) => option.value === value)) select.value = value;
+  }
+  if (typeof workspace.strictValues === "boolean") strictValues.checked = workspace.strictValues;
+  if (typeof workspace.ignoreKeyOrder === "boolean") ignoreKeyOrder.checked = workspace.ignoreKeyOrder;
+  if (typeof workspace.includeEqual === "boolean") includeEqual.checked = workspace.includeEqual;
+  leftInput.value = workspace.left;
+  rightInput.value = workspace.right;
+  openedFileNames.left = typeof workspace.fileNames?.left === "string" ? workspace.fileNames.left : "";
+  openedFileNames.right = typeof workspace.fileNames?.right === "string" ? workspace.fileNames.right : "";
+  currentDiffs = workspace.rows;
+  updateFormatLabels();
+  updateCounts();
+  renderDiffs();
+  if (typeof workspace.status?.message === "string" && ["idle", "valid", "error"].includes(workspace.status.type)) {
+    setStatus(workspace.status.message, workspace.status.type);
+  }
+  setWorkspaceStatus("Workspace saved in this browser.");
+  return true;
+}
+
+function saveWorkspace() {
+  clearTimeout(workspaceSaveTimer);
+  workspaceSaveTimer = null;
+  const workspace = {
+    left: leftInput.value,
+    right: rightInput.value,
+    fileNames: openedFileNames,
+    format: formatSelect.value,
+    mode: compareMode.value,
+    filter: filterSelect.value,
+    strictValues: strictValues.checked,
+    ignoreKeyOrder: ignoreKeyOrder.checked,
+    includeEqual: includeEqual.checked,
+    rows: currentDiffs,
+    status: {
+      message: status.textContent,
+      type: ["valid", "error"].find((type) => status.classList.contains(`status-${type}`)) ?? "idle"
+    }
+  };
+  try {
+    localStorage.setItem(workspaceStorageKey, JSON.stringify(workspace));
+    setWorkspaceStatus("Workspace saved in this browser.");
+  } catch {
+    setWorkspaceStatus("Workspace changes could not be saved.");
+  }
+}
+
+function flushWorkspaceSave() {
+  if (workspaceSaveTimer !== null) saveWorkspace();
+}
+
+function setWorkspaceStatus(message) {
+  if (workspaceStatus.textContent !== message) workspaceStatus.textContent = message;
+}
+
 function handleEditorInput() {
   updateCounts();
   showInputSizeStatus();
+  clearTimeout(workspaceSaveTimer);
+  workspaceSaveTimer = setTimeout(saveWorkspace, 250);
 }
 
 function handleEditorPaste(event, target, label) {
@@ -151,6 +242,7 @@ async function openSelectedFile(input, target, side) {
     updateCounts();
     compareDocuments();
     setStatus(`Opened ${file.name} on ${side}`, "valid");
+    saveWorkspace();
   } catch {
     setStatus("Could not open file", "error");
   }
