@@ -29,7 +29,7 @@ const equalCount = document.querySelector("#equalCount");
 const releaseStamp = document.querySelector("#releaseStamp");
 const workspaceStatus = document.querySelector("#workspaceStatus");
 
-const appRelease = "20261117-0351";
+const appRelease = "20261118-0943";
 
 const workspaceStorageKey = "compare-lizard.workspace.v1";
 let workspaceSaveTimer = null;
